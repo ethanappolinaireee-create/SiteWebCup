@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KYRANOCUP | ESPACE COMPÉTITEUR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=Inter:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root { --red: #ff4655; --bg: #0f1419; --card: #1b232b; --border: #303942; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: #ececec; overflow-x: hidden; }
+        .vlr-font { font-family: 'Orbitron', sans-serif; }
+        .glow-hover:hover { box-shadow: 0 0 20px rgba(255, 70, 85, 0.2); border-color: var(--red) !important; }
+        .live-dot { height: 8px; width: 8px; background-color: var(--red); border-radius: 50%; display: inline-block; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 70, 85, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 70, 85, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 70, 85, 0); } }
+        .vlr-card { background: var(--card); border: 1px solid var(--border); transition: all 0.3s ease; }
+        .vlr-input { background: #0a0e12; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 6px; width: 100%; outline: none; }
+        .vlr-input:focus { border-color: var(--red); }
+        .nav-link { font-size: 11px; font-weight: 900; text-transform: uppercase; color: #7a828d; padding: 0 15px; height: 100%; display: flex; align-items: center; cursor: pointer; position: relative; }
+        .nav-link.active { color: white; }
+        .nav-link.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: var(--red); box-shadow: 0 0 10px var(--red); }
+        .admin-btn { background: var(--red); font-weight: 900; text-transform: uppercase; padding: 10px 20px; border-radius: 4px; cursor: pointer; transition: 0.3s; border:none; color:white; font-size: 11px; }
+        .admin-btn:hover { filter: brightness(1.2); transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const App = () => {
+            // Initialisation avec un admin par défaut
+            const [users, setUsers] = useState(() => JSON.parse(localStorage.getItem('kyra_users')) || [
+                { id: 1, user: 'admin', pass: 'admin', role: 'admin', grade: 'DIRECTOR' }
+            ]);
+            const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('kyra_sess')) || null);
+            const [news, setNews] = useState(() => JSON.parse(localStorage.getItem('kyra_news')) || []);
+            const [matches, setMatches] = useState(() => JSON.parse(localStorage.getItem('kyra_matches')) || []);
+            const [ranks, setRanks] = useState(() => JSON.parse(localStorage.getItem('kyra_ranks')) || []);
+            const [view, setView] = useState('home');
+            const [authMode, setAuthMode] = useState(null); // 'login' ou 'signup'
+
+            useEffect(() => {
+                localStorage.setItem('kyra_users', JSON.stringify(users));
+                localStorage.setItem('kyra_sess', JSON.stringify(currentUser));
+                localStorage.setItem('kyra_news', JSON.stringify(news));
+                localStorage.setItem('kyra_matches', JSON.stringify(matches));
+                localStorage.setItem('kyra_ranks', JSON.stringify(ranks));
+            }, [users, currentUser, news, matches, ranks]);
+
+            // --- AUTH LOGIC ---
+            const handleSignUp = (e) => {
+                e.preventDefault();
+                const username = e.target.u.value;
+                const password = e.target.p.value;
+
+                if (users.find(u => u.user === username)) {
+                    alert("Ce nom d'utilisateur existe déjà !");
+                    return;
+                }
+
+                const newUser = {
+                    id: Date.now(),
+                    user: username,
+                    pass: password,
+                    role: 'player', // Par défaut
+                    grade: 'PROSPECT'
+                };
+
+                setUsers([...users, newUser]);
+                setCurrentUser(newUser);
+                setAuthMode(null);
+            };
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                const found = users.find(x => x.user === e.target.u.value && x.pass === e.target.p.value);
+                if (found) { setCurrentUser(found); setAuthMode(null); }
+                else alert("Identifiants incorrects");
+            };
+
+            // --- ADMIN ACTIONS ---
+            const createMatch = (e) => {
+                e.preventDefault();
+                setMatches([...matches, { id: Date.now(), event: e.target.ev.value, t1: e.target.t1.value, t2: e.target.t2.value, s1: 0, s2: 0, status: 'upcoming' }]);
+                e.target.reset();
+            };
+
+            const updateScore = (id, side, val) => {
+                setMatches(matches.map(m => m.id === id ? (side === 1 ? {...m, s1: Math.max(0, m.s1 + val)} : {...m, s2: Math.max(0, m.s2 + val)}) : m));
+            };
+
+            const finishMatch = (match, winner) => {
+                let newRanks = [...ranks];
+                const teamIdx = newRanks.findIndex(r => r.team === winner);
+                if(teamIdx > -1) newRanks[teamIdx].pts += 25;
+                else newRanks.push({team: winner, pts: 25});
+                setRanks(newRanks.sort((a,b) => b.pts - a.pts));
+                setMatches(matches.map(m => m.id === match.id ? {...m, status: 'finished', winner} : m));
+            };
+
+            return (
+                <div className="min-h-screen">
+                    {/* NAVIGATION */}
+                    <nav className="h-16 bg-[#1b232b]/80 backdrop-blur-md border-b border-[#303942] flex items-center px-8 justify-between sticky top-0 z-[100]">
+                        <div className="flex items-center gap-8 h-full">
+                            <div className="vlr-font text-2xl font-black italic text-white cursor-pointer" onClick={() => setView('home')}>
+                                KYRANO<span className="text-[#ff4655]">CUP</span>
+                            </div>
+                            <div onClick={() => setView('home')} className={`nav-link ${view==='home'?'active':''}`}>Accueil</div>
+                            <div onClick={() => setView('matches')} className={`nav-link ${view==='matches'?'active':''}`}>Matchs</div>
+                            <div onClick={() => setView('stats')} className={`nav-link ${view==='stats'?'active':''}`}>ELO</div>
+                            {currentUser?.role === 'admin' && <div onClick={() => setView('admin')} className="nav-link text-red-500 font-black glow-hover">PANEL ADMIN</div>}
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                            {currentUser ? (
+                                <div className="flex items-center gap-3">
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-red-500 italic leading-none">{currentUser.grade}</p>
+                                        <p className="text-xs font-bold">{currentUser.user}</p>
+                                    </div>
+                                    <button onClick={() => {setCurrentUser(null); setView('home')}} className="hover:text-red-500 transition-colors font-black">✕</button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <button onClick={() => setAuthMode('login')} className="text-[11px] font-black uppercase px-4 py-2 hover:text-white transition-colors">Connexion</button>
+                                    <button onClick={() => setAuthMode('signup')} className="admin-btn">S'inscrire</button>
+                                </div>
+                            )}
+                        </div>
+                    </nav>
+
+                    {/* MODAL AUTH */}
+                    {authMode && (
+                        <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4 animate__animated animate__fadeIn">
+                            <form onSubmit={authMode === 'login' ? handleLogin : handleSignUp} className="vlr-card p-10 w-full max-w-sm rounded-2xl space-y-4 relative">
+                                <h2 className="vlr-font text-2xl font-black text-red-500 uppercase text-center italic">
+                                    {authMode === 'login' ? 'Accès Membre' : 'Créer un Compte'}
+                                </h2>
+                                <input name="u" placeholder="NOM D'UTILISATEUR" className="vlr-input" required />
+                                <input name="p" type="password" placeholder="MOT DE PASSE" className="vlr-input" required />
+                                <button className="admin-btn w-full py-4 text-sm">
+                                    {authMode === 'login' ? 'Se connecter' : 'Confirmer l\'inscription'}
+                                </button>
+                                <div className="text-center text-[10px] uppercase opacity-50 space-y-2">
+                                    <p onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="cursor-pointer hover:text-red-500">
+                                        {authMode === 'login' ? "Pas de compte ? S'inscrire" : "Déjà membre ? Se connecter"}
+                                    </p>
+                                    <p onClick={() => setAuthMode(null)} className="cursor-pointer">Annuler</p>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    <main className="max-w-7xl mx-auto mt-10 px-6 pb-20">
+                        {/* VUES */}
+                        {view === 'home' && (
+                            <div className="grid grid-cols-12 gap-10">
+                                <div className="col-span-8 space-y-6">
+                                    {news.length > 0 ? news.map(n => (
+                                        <div key={n.id} className="vlr-card rounded-2xl overflow-hidden relative h-[400px] group animate__animated animate__fadeIn">
+                                            <img src={n.img} className="w-full h-full object-cover opacity-40 group-hover:scale-105 transition-transform duration-700" />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent p-10 flex flex-col justify-end">
+                                                <h2 className="vlr-font text-4xl font-black uppercase italic leading-tight">{n.title}</h2>
+                                                <p className="text-gray-400 mt-2 max-w-xl">{n.desc}</p>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="vlr-card p-20 text-center rounded-2xl opacity-20 italic">Aucune actualité pour le moment</div>
+                                    )}
+                                </div>
+                                <div className="col-span-4 space-y-6">
+                                    <h3 className="vlr-font text-xs font-black text-red-500 border-l-4 border-red-500 pl-3 uppercase">En Direct</h3>
+                                    {matches.filter(m => m.status === 'live').map(m => (
+                                        <div key={m.id} className="vlr-card p-5 rounded-xl border-r-4 border-red-500">
+                                            <div className="flex justify-between text-[10px] font-black text-gray-500 mb-4 uppercase italic">
+                                                <span>{m.event}</span>
+                                                <span className="flex items-center gap-2"><div className="live-dot"></div> LIVE</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm font-black uppercase">
+                                                <span className="w-20">{m.t1}</span>
+                                                <span className="vlr-font text-xl bg-black/40 px-3 py-1 rounded text-red-500">{m.s1} - {m.s2}</span>
+                                                <span className="w-20 text-right">{m.t2}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'matches' && (
+                            <div className="space-y-6">
+                                <h1 className="vlr-font text-3xl font-black italic uppercase underline decoration-red-500">Prochains Chocs</h1>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {matches.filter(m => m.status === 'upcoming').map(m => (
+                                        <div key={m.id} className="vlr-card p-8 rounded-xl flex justify-between items-center hover:bg-white/5 transition-all cursor-default">
+                                            <div className="text-left"><p className="text-[10px] text-red-500 font-bold uppercase">{m.event}</p><h4 className="vlr-font text-xl font-black italic">{m.t1}</h4></div>
+                                            <div className="text-center bg-white/5 px-6 py-2 rounded-full font-black text-xs">VS</div>
+                                            <div className="text-right"><p className="text-[10px] text-gray-500 font-bold uppercase">Tournoi</p><h4 className="vlr-font text-xl font-black italic">{m.t2}</h4></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'stats' && (
+                            <div className="max-w-2xl mx-auto">
+                                <h1 className="vlr-font text-3xl font-black text-center italic mb-10 uppercase">Classement <span className="text-red-500">Global</span></h1>
+                                <div className="vlr-card rounded-2xl overflow-hidden shadow-2xl">
+                                    {ranks.length > 0 ? ranks.map((r, i) => (
+                                        <div key={i} className="flex justify-between p-6 border-b border-white/5 items-center hover:bg-white/5 transition-colors">
+                                            <span className="vlr-font text-xl font-black italic text-gray-600">#{i+1}</span>
+                                            <span className="vlr-font text-lg font-black uppercase tracking-wider">{r.team}</span>
+                                            <span className="bg-red-500/10 text-red-500 px-4 py-1 rounded-full font-black italic">{r.pts} PTS</span>
+                                        </div>
+                                    )) : <div className="p-10 text-center opacity-30 italic">Aucune donnée ELO</div>}
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'admin' && currentUser?.role === 'admin' && (
+                            <div className="space-y-10 animate__animated animate__fadeIn">
+                                <div className="flex justify-between items-center border-b border-white/10 pb-6">
+                                    <h1 className="vlr-font text-4xl font-black italic uppercase">Matrix <span className="text-red-500">Control</span></h1>
+                                    <button onClick={() => {if(confirm("Wipe?")) {localStorage.clear(); window.location.reload();}}} className="text-[10px] border border-white/20 px-4 py-2 rounded hover:bg-red-500 hover:border-red-500 transition-all font-black uppercase">Reset All Data</button>
+                                </div>
+                                <div className="grid grid-cols-3 gap-8">
+                                    <div className="vlr-card p-6 rounded-xl">
+                                        <h3 className="vlr-font text-xs font-black mb-6 uppercase text-red-500">Nouveau Match</h3>
+                                        <form onSubmit={createMatch} className="space-y-4">
+                                            <input name="ev" placeholder="Evènement" className="vlr-input" required />
+                                            <input name="t1" placeholder="Equipe A" className="vlr-input" required />
+                                            <input name="t2" placeholder="Equipe B" className="vlr-input" required />
+                                            <button className="admin-btn w-full">Créer</button>
+                                        </form>
+                                    </div>
+                                    <div className="vlr-card p-6 rounded-xl">
+                                        <h3 className="vlr-font text-xs font-black mb-6 uppercase text-blue-500">Publier News</h3>
+                                        <form onSubmit={(e) => {
+                                            e.preventDefault();
+                                            setNews([{id: Date.now(), title: e.target.t.value, desc: e.target.d.value, img: e.target.i.value}, ...news]);
+                                            e.target.reset();
+                                        }} className="space-y-4">
+                                            <input name="t" placeholder="Titre" className="vlr-input" required />
+                                            <input name="d" placeholder="Description" className="vlr-input" required />
+                                            <input name="i" placeholder="URL Image" className="vlr-input" required />
+                                            <button className="admin-btn w-full bg-blue-600">Poster</button>
+                                        </form>
+                                    </div>
+                                    <div className="vlr-card p-6 rounded-xl overflow-y-auto max-h-[300px]">
+                                        <h3 className="vlr-font text-xs font-black mb-6 uppercase text-green-500">Membres ({users.length})</h3>
+                                        {users.map(u => (
+                                            <div key={u.id} className="flex justify-between text-[10px] mb-2 bg-black/20 p-2 rounded">
+                                                <span className="font-bold">{u.user}</span>
+                                                <span className={u.role==='admin'?'text-red-500':'text-gray-500'}>{u.role.toUpperCase()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="vlr-card p-8 rounded-2xl">
+                                    <h2 className="vlr-font text-sm font-black mb-6 uppercase opacity-50 italic">Gestion des Matchs</h2>
+                                    <div className="grid gap-4">
+                                        {matches.map(m => (
+                                            <div key={m.id} className="flex justify-between items-center bg-black/40 p-6 rounded-xl border border-white/5">
+                                                <span className="font-black uppercase text-sm">{m.t1} vs {m.t2}</span>
+                                                <div className="flex gap-4 items-center">
+                                                    {m.status === 'upcoming' && <button onClick={() => setMatches(matches.map(x=>x.id===m.id?{...x, status:'live'}:x))} className="text-xs font-black text-green-500">Lancer Live</button>}
+                                                    {m.status === 'live' && (
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="flex gap-1">
+                                                                <button onClick={() => updateScore(m.id, 1, 1)} className="bg-white/10 w-6 h-6 rounded">+</button>
+                                                                <span className="vlr-font text-red-500 mx-2">{m.s1}-{m.s2}</span>
+                                                                <button onClick={() => updateScore(m.id, 2, 1)} className="bg-white/10 w-6 h-6 rounded">+</button>
+                                                            </div>
+                                                            <button onClick={() => finishMatch(m, m.s1 > m.s2 ? m.t1 : m.t2)} className="bg-red-500 px-3 py-1 rounded text-[10px] font-black italic uppercase">Terminer</button>
+                                                        </div>
+                                                    )}
+                                                    <button onClick={() => setMatches(matches.filter(x => x.id !== m.id))} className="text-red-500 font-black">✕</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
